@@ -323,12 +323,6 @@ void drawMenu(int lenght, int position) {
 
 
 void gameSetup() {
-  Wire.begin(SDA_PIN, SCL_PIN);
-  pinMode(BUTTON_UP, INPUT_PULLUP);
-  pinMode(BUTTON_DOWN, INPUT_PULLUP);
-  pinMode(BUTTON_SHOOT, INPUT_PULLUP);
-  pinMode(BUZZER_PIN, OUTPUT);
-
   display.clearDisplay();
 
   display.drawBitmap(6, 11, storm, 48,48, 1);
