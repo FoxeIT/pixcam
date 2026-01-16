@@ -5,6 +5,10 @@
 #include "Org_01.h"
 #include "Picopixel.h"
 
+
+
+
+
 /*
   _   ___        ___    ____    _      ____ ___ _  _____  ____  _____ __  __ 
  | | | \ \      / / \  / ___|  / \    / ___|_ _| |/ / _ \|  _ \| ____|  \/  |
@@ -41,7 +45,7 @@ const int maxModes = 1;
  ───  │││││││ │ ├─┘│┌┴┬┘├┤ │  └─┐
       ┴ ┴┴┘└┘ ┴ ┴  ┴┴ └─└─┘┴─┘└─┘
 */
-
+#define SHUTTER_BUTTON 13
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -83,7 +87,7 @@ static const unsigned char PROGMEM image_Pin_pointer_bits[] = {0x20,0x70,0xf8};
 int mode = 0;
 
 void setup() {
-  pinMode(INPUT_PULLUP, 12);
+  pinMode(INPUT_PULLUP, SHUTTER_BUTTON);
   Serial.begin(115200);
 
   // 1. Inicjalizacja I2C na wybranych pinach
@@ -126,22 +130,27 @@ void setup() {
     return;
   }
 }
-
+int lastButtonState = LOW
 void loop() {
+  //input tutaj
+  bool buttonState = digitalRead()
   switch (mode) {
     case 0:
       viewFinder();
       return;
     case 1:
-      drawMenu(1, 1);
+      // główne menu
+      drawMenu(0, 0);
       return;
-
+    case 2
+  
     default:
       mode = 0;
       return;
   }
   delay(50);
-  if (digitalRead(12) == HIGH) {while(digitalRead(12) == HIGH){}mode = mode + 1;if (mode>maxModes){mode = 0;}}
+  //do usunięcia
+  if (digitalRead(SHUTTER_BUTTON) == HIGH){while(digitalRead(SHUTTER_BUTTON) == HIGH){}mode = mode + 1;}
 }
 
 void viewFinder() {
@@ -164,11 +173,15 @@ void viewFinder() {
       uint8_t pixel = fb->buf[(y + startY) * 160 + (x + startX)];
 
       // Progowanie (Dithering/Threshold): powyżej 127 = biały, poniżej = czarny
-      if (pixel > 170) {
+      if (pixel > 200) {
         display.drawPixel(x, y, SSD1306_WHITE);
       } else {
-        if (pixel > 80 && x % 2) {
+        if (pixel > 100 && x % 2) {
           display.drawPixel(x + (y % 2), y, SSD1306_WHITE);
+        } else {
+          if (pixel > 50 && x % 3 == 1 && y % 3 == 1) {
+            display.drawPixel(x, y, SSD1306_WHITE);
+          }
         }
       }
     }
@@ -207,7 +220,38 @@ void viewFinder() {
    // Zwolnienie pamięci
 }
 
-void drawMenu(int lenght, int position) {
+void menuActionHandler(int position, int type) {
+  switch (type) {
+    case 0:
+      switch(position) {
+        case 0:
+          mode = 0;
+          return;
+        case 1:
+          //gejleria
+          return;
+        case 2:
+          //gjerki
+          return;
+        default:
+          return;
+      }
+    
+    default:
+      return;
+    }
+  }
+}
+
+void drawMenu(int position, int type) {
+  int arrayLenght;
+  switch (type) {
+    case 0:
+      //główne menu
+      String[3] menuItems = {"Return to menu", "Gallery", "Games"};
+      arrayLenght = 3;
+  }
+  int pages = arrayLenght-1/3
   display.clearDisplay();
     
   display.drawLine(0, 11, 127, 11, 1);
@@ -232,28 +276,24 @@ void drawMenu(int lenght, int position) {
 
   display.drawBitmap(120, 56, image_SmallArrowDown_bits, 5, 3, 1);
 
-  display.fillRect(121, 20, 3, 34, 1);
+  display.fillRect(121, 20, 3, 34/(pages+1), 1);
 
   display.drawRoundRect(120, 20, 5, 34, 2, 1);
-
-  display.drawRoundRect(3, 14, 114, 14, 3, 1);
-
   display.setFont();
+  if (position%3==0){display.fillRoundRect(3, 14, 114, 14, 3, 1);display.setTextColor(0);} else {display.drawRoundRect(3, 14, 114, 14, 3, 1);display.setTextColor(1);}
+
   display.setCursor(6, 17);
   display.print("Back to camera");
 
-  display.fillRoundRect(3, 30, 114, 14, 3, 1);
+  if (position%3==1){display.fillRoundRect(3, 30, 114, 14, 3, 1);display.setTextColor(0);} else {display.drawRoundRect(3, 30, 114, 14, 3, 1);display.setTextColor(1);}
 
-  display.setTextColor(0);
   display.setCursor(6, 33);
   display.print("Palettes");
 
-  display.drawRoundRect(3, 46, 114, 14, 3, 1);
+  if (position%3==2){display.fillRoundRect(3, 46, 114, 14, 3, 1);display.setTextColor(0);} else {display.drawRoundRect(3, 46, 114, 14, 3, 1);display.setTextColor(1);}
 
-  display.setTextColor(1);
   display.setCursor(6, 49);
   display.print("Settings");
 
   display.display();
-
 }
