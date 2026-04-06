@@ -1,0 +1,15 @@
+partition layout must be custom and flash size must equal 16MB
+
+MAKING LITTLEFS
+mklittlefs-4.1.0-5-g68af3b9-generic-linux64/mklittlefs -c /home/minty/Arduino/sketch_feb16b/data/ -b 4096 -p 256 -s 0x300000 littlefs.bin
+^^^^
+replace command with your alias for littleFS
+replace data folder location with your data folder location
+the data folder's contents will be included in littleFS, limit is 3MB, but try to not exceed 2MB for good measure.
+
+UPLOADING LITTLEFS
+esptool --chip esp32s3 --port /dev/ttyACM0 --baud 460800 write_flash 0x610000 littlefs.bin
+^^^^
+replace command with your alias for esptool
+replace port with your port that the esp is connected to (or remove the --port argument entirely to try with all ports)
+
