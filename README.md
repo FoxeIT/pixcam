@@ -1,2 +1,2 @@
 # pixcam
-sci++ project
+sci++ project, see ur website: https://site.perfekcyjnynonsens.workers.dev
