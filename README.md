@@ -1,2 +1,3 @@
-# pixcam
-sci++ project, see ur website: https://site.perfekcyjnynonsens.workers.dev
+# PixCam
+Te repozytorium zawiera pliki związane z kodem PixCama.
+
