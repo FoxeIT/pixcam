@@ -17,7 +17,6 @@
 #include <Adafruit_NeoPixel.h>
 #include <Preferences.h>
 #include "webserver.h"  // AP + HTTP server logic
-#include "uwu.h"
 
 
 // ─── Palette list (needed before lists[]) ────────────────────────
