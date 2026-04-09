@@ -1548,8 +1548,8 @@ void drawTopbar() {
 
 // ─── drawMemOverlay(false) ────────────────────────────────────────────
 void drawMemOverlay(bool push) {
+  display.setFont(&Picopixel);
   display.setCursor(0, 0);
-  display.setFont();
   display.println("Mem stats (f/t):");
   display.print("Heap: ");
   display.print(ESP.getFreeHeap());
