@@ -157,7 +157,7 @@ static const unsigned char PROGMEM image_SmallArrowDown_bits[] = { 0xf8, 0x70, 0
 static const unsigned char PROGMEM image_Pin_pointer_bits[] = { 0x20, 0x70, 0xf8 };
 static const unsigned char PROGMEM image_ButtonLeftSmall_bits[] = { 0x20, 0x60, 0xe0, 0x60, 0x20 };
 static const unsigned char PROGMEM image_ButtonRightSmall_bits[] = { 0x80, 0xc0, 0xe0, 0xc0, 0x80 };
-static const unsigned char PROGMEM image_paint_2_bits[] = {0xff,0xff,0x80,0xff,0x80,0xff,0x80,0xff,0x80,0xff,0x80,0xff,0x80,0xff,0x80,0xff,0xff,0x01,0xff,0x01,0xff,0x01,0xff,0x01,0xff,0x01,0xff,0x01,0xff,0x01,0xff,0xff};
+static const unsigned char PROGMEM image_paint_17_bits[] = {0x00,0x20,0x00,0x00,0x50,0x00,0x0f,0xff,0x80,0x11,0x04,0x40,0x22,0x02,0x20,0x24,0xf9,0x20,0x29,0x04,0xa0,0x32,0x72,0x60,0x24,0x89,0x20,0x65,0x05,0x30,0xa5,0x05,0x28,0x65,0x05,0x30,0x24,0x89,0x20,0x32,0x72,0x60,0x29,0x04,0xa0,0x24,0xf9,0x20,0x22,0x02,0x20,0x11,0x04,0x40,0x0f,0xff,0x80,0x00,0x50,0x00,0x00,0x20,0x00};
 
 
 // ─── State ───────────────────────────────────────────────────────
@@ -597,42 +597,77 @@ void loop() {
 
   if ((lastButState == buttonState) && (cursorPos == lastPosition) && (mode == lastmode)) {
     if (millis() - sleepTimer > sleepTime) {
-      Serial.println("=== AUTO SLEEP ===");
-
-      diode.setPixelColor(0,0,0,0);
-      diode.show();
-
-      display.clearDisplay();
-      display.display();
-
       if (mode == 2) {
         stopWebServer();
       }
+      diode.setPixelColor(0, 0, 0, 0);
+      diode.show();
+      diode2.setPixelColor(0, 0, 0, 0);
+      diode2.show();
 
-      while (digitalRead(SHUTTER_BUTTON) == LOW) delay(10);
-      delay(300);  // was 50
-      esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);
+      display.ssd1306_command(SSD1306_DISPLAYOFF);
+      display.clearDisplay();
+      display.display();
 
+      SD_MMC.end();
+      
+
+      esp_camera_deinit();
+      
+
+      Wire.end();
+
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+
+      rtc_gpio_isolate(GPIO_NUM_14);  // WAKEUP_GPIO
+      
+
+      
       delay(100);
+      
+
+      esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);  // budzenie gdy pin = LOW
+      delay(50);
+      
+
       esp_deep_sleep_start();
-    }else if ((millis() - sleepTimer * 5 > sleepTimer * 5) && (mode==2))
+    } else if ((millis() - sleepTimer * 5 > sleepTime * 5) && (mode==2))
 {
-  
-      diode.setPixelColor(0,0,0,0);
-      diode.show();
-
-      display.clearDisplay();
-      display.display();
-
       if (mode == 2) {
         stopWebServer();
       }
+      diode.setPixelColor(0, 0, 0, 0);
+      diode.show();
+      diode2.setPixelColor(0, 0, 0, 0);
+      diode2.show();
 
-      while (digitalRead(SHUTTER_BUTTON) == LOW) delay(10);
-      delay(300);  // was 50
-      esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);
+      display.ssd1306_command(SSD1306_DISPLAYOFF);
+      display.clearDisplay();
+      display.display();
 
+      SD_MMC.end();
+      
+
+      esp_camera_deinit();
+      
+
+      Wire.end();
+
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+
+      rtc_gpio_isolate(GPIO_NUM_14);  // WAKEUP_GPIO
+      
+
+      
       delay(100);
+      
+
+      esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);  // budzenie gdy pin = LOW
+      delay(50);
+      
+
       esp_deep_sleep_start();
 } 
 
@@ -888,12 +923,6 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
         case 4: gameInit(); break;     // Game
         case 5: switchList(1); break;  // Settings
         case 6:  // Sleep mode
-        display.clearDisplay();
-        display.setCursor(0, 20);
-        display.println("Going to sleep...");
-        display.display();
-        
-
         diode.setPixelColor(0, 0, 0, 0);
         diode.show();
         diode2.setPixelColor(0, 0, 0, 0);
@@ -922,9 +951,6 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
         
 
         esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);  // budzenie gdy pin = LOW
-        
-        Serial.println("Entering deep sleep...");
-        Serial.flush();
         delay(50);
         
 
@@ -973,7 +999,7 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
           display.setCursor(33, 19);
           display.print("PixCam");
 
-          display.drawBitmap(14, 4, image_paint_2_bits, 16, 16, 1);
+          display.drawBitmap(12, 2, image_paint_17_bits, 21, 21, 1);
 
           display.setFont();
           display.setCursor(11, 25);
@@ -1006,6 +1032,7 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
           display.display();
           while (digitalRead(SHUTTER_BUTTON) == LOW) {}
           while (digitalRead(SHUTTER_BUTTON) == HIGH) {}
+          while (digitalRead(SHUTTER_BUTTON) == LOW) {}
           break;
         case 6:
           display.clearDisplay();
