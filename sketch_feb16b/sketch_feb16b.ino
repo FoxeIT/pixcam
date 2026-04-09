@@ -615,7 +615,27 @@ void loop() {
 
       delay(100);
       esp_deep_sleep_start();
-    }
+    }else if ((millis() - sleepTimer * 5 > sleepTimer * 5) && (mode==2))
+{
+  
+      diode.setPixelColor(0,0,0,0);
+      diode.show();
+
+      display.clearDisplay();
+      display.display();
+
+      if (mode == 2) {
+        stopWebServer();
+      }
+
+      while (digitalRead(SHUTTER_BUTTON) == LOW) delay(10);
+      delay(300);  // was 50
+      esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);
+
+      delay(100);
+      esp_deep_sleep_start();
+} 
+
   } else {
     sleepTimer = millis();
   }
