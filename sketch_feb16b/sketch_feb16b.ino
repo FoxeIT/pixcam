@@ -744,7 +744,7 @@ void drawValueChanger(int value) {
       display.print(cursorPos);
       display.print("/255");
       drawTopbar();
-      if (memOverlay) {drawMemOverlay();}
+      if (memOverlay) {drawMemOverlay(false);}
       display.display();
       break;
     case 1:
@@ -768,7 +768,7 @@ void drawValueChanger(int value) {
       display.print(cursorPos);
       display.print("/100");
       drawTopbar();
-      if (memOverlay) {drawMemOverlay();}
+      if (memOverlay) {drawMemOverlay(false);}
       display.display();
       break;
     default: break;
@@ -850,7 +850,7 @@ void drawWebServerScreen() {
   display.setFont(&Picopixel);
   display.setCursor(0, 63);
   display.print("Short press to stop");
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -897,7 +897,7 @@ void viewFinder() {
     display.setCursor(23, 19);
     display.print("Release - Menu");
   }
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -1329,7 +1329,7 @@ void drawMenu() {
   }
 
   drawTopbar();
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -1373,7 +1373,7 @@ void loadingScreen(int progress, String text) {
   display.setFont(&Picopixel);
   display.setCursor(6, 45);
   display.print(text);
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -1409,7 +1409,7 @@ void takePicture() {
   display.setFont();
   display.setCursor(0, 0);
   display.println("Taking picture...");
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 
   // Do NOT change framesize or pixformat here.
@@ -1492,7 +1492,7 @@ void takePicture() {
 
   // Dithering
   display.println("Processing...");
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
   if (useDither) ditherRGB(rgbBuf, W, H);
 
@@ -1512,7 +1512,7 @@ void takePicture() {
   char path[32];
   snprintf(path, sizeof(path), "/images/img_%03d.jpg", pictureNumber);
   display.println("Saving...");
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 
   File f = SD_MMC.open(path, FILE_WRITE);
@@ -1546,7 +1546,7 @@ void drawTopbar() {
 }
 
 
-// ─── drawMemOverlay() ────────────────────────────────────────────
+// ─── drawMemOverlay(false) ────────────────────────────────────────────
 void drawMemOverlay(bool push) {
   display.setCursor(0, 0);
   display.setFont();
@@ -1644,7 +1644,7 @@ void gameInit() {
   display.setTextSize(0);
   display.setCursor(65, 55);
   display.println("by FoxenIT");
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
   resetGry();
   delay(500);
@@ -1773,7 +1773,7 @@ void rozgrywka() {
     kula4X = 200;
   }
   if (zycia == 0) koniec = 1;
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -1797,7 +1797,7 @@ void ekranKoncowy() {
   display.println("time(s):");
   display.setCursor(60, 50);
   display.println(czasAktualny / 1000);
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -1921,7 +1921,7 @@ void drawGalleryList() {
   }
 
   drawTopbar();
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 }
 
@@ -2018,7 +2018,7 @@ void drawGalleryFullscreen() {
   }
 
 
-  if (memOverlay) {drawMemOverlay();}
+  if (memOverlay) {drawMemOverlay(false);}
   display.display();
 
 }
