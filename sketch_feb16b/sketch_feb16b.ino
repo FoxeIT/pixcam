@@ -16,7 +16,7 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <Preferences.h>
-#include "webserver.h"  // AP + HTTP server logic
+#include "webserverr.h"  // AP + HTTP server logic
 
 
 // ─── Palette list (needed before lists[]) ────────────────────────
@@ -40,13 +40,14 @@ const char* getSelectedPalettePath() {
 //                    increases the resolution but it no workie :(
 //            (16:28:39.502 -> fb: reported 320x240 len=38400 using 320x60)
 
-const char* menuItemsa[6] = {
+const char* menuItemsa[7] = {
   "Return to cam",   //done
   "Gallery",         //DONE
-  "Web Gallery",     //the website has a bug
+  "Web Portal",     //the website has a bug
   "Change palette",  //done
   "Game",            //there's a bug with resetting
-  "Settings"         //done
+  "Settings",        //done
+  "Sleep mode"
 };
 const char* menuItemsb[8] = {
   "Back",              //DONE
@@ -103,13 +104,7 @@ int activePaletteSize = 0;
   Gdy dodajesz tryb, zmień wartość zmiennej maxModes poniżej.
 */
 const int maxModes = 2;  // 0=cam, 1=menu, 2=webserver
-/*
- Miłego kodowania szanowny (nie)kolego <3
 
-      ┌┬┐┬┌┐┌┌┬┐┌─┐┬─┐ ┬┌─┐┬  ┌─┐
- ───  │││││││ │ ├─┘│┌┴┬┘├┤ │  └─┐
-      ┴ ┴┴┘└┘ ┴ ┴  ┴┴ └─└─┘┴─┘└─┘
-*/
 
 
 // ─── Pin definitions ─────────────────────────────────────────────
@@ -409,6 +404,13 @@ int jpegQuality = 90;
 
 // ─── setup() ─────────────────────────────────────────────────────
 void setup() {
+
+  Serial.begin(115200);
+  delay(200);  // give serial time to init
+
+  Serial.printf("Wakeup cause: %d\n", esp_sleep_get_wakeup_cause());
+  Serial.printf("EXT1 status: %llu\n", esp_sleep_get_ext1_wakeup_status());
+  // ... rest of your setup
   preferences.begin("camera", false);
   ledBrightness = preferences.getInt("brightness", 100);
   jpegQuality = preferences.getInt("quality", 90);
@@ -595,21 +597,29 @@ void loop() {
 
   if ((lastButState == buttonState) && (cursorPos == lastPosition) && (mode == lastmode)) {
     if (millis() - sleepTimer > sleepTime) {
+      Serial.println("=== AUTO SLEEP ===");
+
       diode.setPixelColor(0,0,0,0);
       diode.show();
+
       display.clearDisplay();
       display.display();
+
       if (mode == 2) {
         stopWebServer();
       }
+
+      while (digitalRead(SHUTTER_BUTTON) == LOW) delay(10);
+      delay(300);  // was 50
       esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);
-      rtc_gpio_pullup_dis(WAKEUP_GPIO);
-      rtc_gpio_pulldown_en(WAKEUP_GPIO);
+
+      delay(100);
       esp_deep_sleep_start();
     }
   } else {
     sleepTimer = millis();
   }
+  
 
   lastmode = mode;
   lastButState = buttonState;
@@ -857,6 +867,49 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
         case 3: switchList(2); break;  // Change palette
         case 4: gameInit(); break;     // Game
         case 5: switchList(1); break;  // Settings
+        case 6:  // Sleep mode
+        display.clearDisplay();
+        display.setCursor(0, 20);
+        display.println("Going to sleep...");
+        display.display();
+        
+
+        diode.setPixelColor(0, 0, 0, 0);
+        diode.show();
+        diode2.setPixelColor(0, 0, 0, 0);
+        diode2.show();
+
+        display.ssd1306_command(SSD1306_DISPLAYOFF);
+        display.clearDisplay();
+        display.display();
+
+        SD_MMC.end();
+        
+
+        esp_camera_deinit();
+        
+
+        Wire.end();
+
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+
+        rtc_gpio_isolate(GPIO_NUM_14);  // WAKEUP_GPIO
+        
+
+        
+        delay(100);
+        
+
+        esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);  // budzenie gdy pin = LOW
+        
+        Serial.println("Entering deep sleep...");
+        Serial.flush();
+        delay(50);
+        
+
+        esp_deep_sleep_start();
+        break;
       }
       break;
 
@@ -1516,6 +1569,7 @@ void gameInit() {
   display.setCursor(65, 17);
   display.setTextSize(0);
   display.println("vs");
+  //mintpixels is gay (mint jest cwelem tzw. michał opieka)
   display.setCursor(65, 30);
   display.println("Death");
   display.setCursor(65, 43);
