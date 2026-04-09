@@ -114,6 +114,7 @@ const int maxModes = 2;  // 0=cam, 1=menu, 2=webserver
 
 // ─── Pin definitions ─────────────────────────────────────────────
 #define SHUTTER_BUTTON 14
+#define WAKEUP_GPIO GPIO_NUM_14
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -594,7 +595,17 @@ void loop() {
 
   if ((lastButState == buttonState) && (cursorPos == lastPosition) && (mode == lastmode)) {
     if (millis() - sleepTimer > sleepTime) {
-      // deep sleep placeholder
+      diode.setPixelColor(0,0,0,0);
+      diode.show();
+      display.clearDisplay();
+      display.display();
+      if (mode == 2) {
+        stopWebServer();
+      }
+      esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);
+      rtc_gpio_pullup_dis(WAKEUP_GPIO);
+      rtc_gpio_pulldown_en(WAKEUP_GPIO);
+      esp_deep_sleep_start();
     }
   } else {
     sleepTimer = millis();
@@ -920,8 +931,8 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
           display.print("- Website, firmware");
 
           display.display();
-          while (digitalRead(SHUTTER_BUTTON) == HIGH) {}
           while (digitalRead(SHUTTER_BUTTON) == LOW) {}
+          while (digitalRead(SHUTTER_BUTTON) == HIGH) {}
           break;
         case 6:
           display.clearDisplay();
