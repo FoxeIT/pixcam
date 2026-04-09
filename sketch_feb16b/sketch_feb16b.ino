@@ -18,7 +18,7 @@
 #include <Preferences.h>
 #include "webserverr.h"  // AP + HTTP server logic
 
-
+bool memOverlay = false;
 // ─── Palette list (needed before lists[]) ────────────────────────
 #define MAX_PALETTES 256
 char paletteList[MAX_PALETTES][512];
@@ -49,7 +49,7 @@ const char* menuItemsa[7] = {
   "Settings",        //done
   "Sleep mode"
 };
-const char* menuItemsb[8] = {
+const char* menuItemsb[9] = {
   "Back",              //DONE
   "Toggle flash",      //DONE
   "Flash brightness",  //DONE
@@ -57,7 +57,8 @@ const char* menuItemsb[8] = {
   "JPEG quality",      //DONE
   "Credits",           //DONE
   "Reset",             //DONE
-  "Format SD"          //TODO
+  "Format SD",         //TODO
+  "Toggle mem overlay"
 };
 
 struct MenuList {
@@ -743,6 +744,7 @@ void drawValueChanger(int value) {
       display.print(cursorPos);
       display.print("/255");
       drawTopbar();
+      if (memOverlay) {drawMemOverlay();}
       display.display();
       break;
     case 1:
@@ -766,6 +768,7 @@ void drawValueChanger(int value) {
       display.print(cursorPos);
       display.print("/100");
       drawTopbar();
+      if (memOverlay) {drawMemOverlay();}
       display.display();
       break;
     default: break;
@@ -847,7 +850,7 @@ void drawWebServerScreen() {
   display.setFont(&Picopixel);
   display.setCursor(0, 63);
   display.print("Short press to stop");
-
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -872,15 +875,15 @@ void viewFinder() {
       uint8_t b = (px & 0x1F) << 3;
       uint8_t luma = (r * 77 + g * 150 + b * 29) >> 8;
       if (luma > 175) display.drawPixel(x, y, SSD1306_WHITE);
-      else if (luma > 75 && x % 2) display.drawPixel(x + (y % 2), y, SSD1306_WHITE);
-      else if (luma > 25 && x % 3 == 1 && y % 3 == 1) display.drawPixel(x, y, SSD1306_WHITE);
+      else if (luma > 120 && x % 2) display.drawPixel(x + (y % 2), y, SSD1306_WHITE);
+      else if (luma > 30 && x % 3 == 1 && y % 3 == 1) display.drawPixel(x, y, SSD1306_WHITE);
     }
   }
   esp_camera_fb_return(fb);
   drawTopbar();
 
   if (useFlash) {
-    display.fillRect(114, 12, 13, 16, 0);
+    display.fillRect(114, 12, 16, 16, 0);
     display.drawRoundRect(113, 11, 16, 17, 1, 1);
     display.drawBitmap(114, 12, image_Voltage_bits, 16, 16, 1);
   }
@@ -894,6 +897,7 @@ void viewFinder() {
     display.setCursor(23, 19);
     display.print("Release - Menu");
   }
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -1268,6 +1272,16 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
           }
           switchList(1);
           break;
+        case 8:
+          memOverlay = !memOverlay;
+          display.fillRoundRect(20, 15, 88, 16, 3, 0);
+          display.drawRoundRect(20, 15, 88, 16, 3, 1);
+          display.setFont();
+          display.setCursor(memOverlay ? 44 : 41, 19);
+          display.print(memOverlay ? "Enabled" : "Disabled");
+          display.display();
+          delay(1000);
+          break;
       }
       break;
 
@@ -1315,6 +1329,7 @@ void drawMenu() {
   }
 
   drawTopbar();
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -1358,6 +1373,7 @@ void loadingScreen(int progress, String text) {
   display.setFont(&Picopixel);
   display.setCursor(6, 45);
   display.print(text);
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -1393,6 +1409,7 @@ void takePicture() {
   display.setFont();
   display.setCursor(0, 0);
   display.println("Taking picture...");
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 
   // Do NOT change framesize or pixformat here.
@@ -1412,7 +1429,7 @@ void takePicture() {
   delay(50);
 
   if (useFlash) {
-    diode.setPixelColor(0, diode.Color(0, 255, 0));
+    diode.setPixelColor(0, diode.Color(255, 255, 255));
     diode.show();
     for (int i = 0; i<3;i++) {
       dummy = esp_camera_fb_get();
@@ -1421,8 +1438,9 @@ void takePicture() {
     }
     diode.setPixelColor(0, diode.Color(0, 0, 0));
     diode.show();
-    delay(200);
-    diode.setPixelColor(0, diode.Color(0, 255, 0));
+    delay(300);
+    diode.setPixelColor(0, diode.Color(255, 255, 255));
+    delay(150);
     diode.show();
   }
 
@@ -1474,6 +1492,7 @@ void takePicture() {
 
   // Dithering
   display.println("Processing...");
+  if (memOverlay) {drawMemOverlay();}
   display.display();
   if (useDither) ditherRGB(rgbBuf, W, H);
 
@@ -1493,6 +1512,7 @@ void takePicture() {
   char path[32];
   snprintf(path, sizeof(path), "/images/img_%03d.jpg", pictureNumber);
   display.println("Saving...");
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 
   File f = SD_MMC.open(path, FILE_WRITE);
@@ -1624,6 +1644,7 @@ void gameInit() {
   display.setTextSize(0);
   display.setCursor(65, 55);
   display.println("by FoxenIT");
+  if (memOverlay) {drawMemOverlay();}
   display.display();
   resetGry();
   delay(500);
@@ -1752,6 +1773,7 @@ void rozgrywka() {
     kula4X = 200;
   }
   if (zycia == 0) koniec = 1;
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -1775,6 +1797,7 @@ void ekranKoncowy() {
   display.println("time(s):");
   display.setCursor(60, 50);
   display.println(czasAktualny / 1000);
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -1898,6 +1921,7 @@ void drawGalleryList() {
   }
 
   drawTopbar();
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 }
 
@@ -1994,7 +2018,7 @@ void drawGalleryFullscreen() {
   }
 
 
-
+  if (memOverlay) {drawMemOverlay();}
   display.display();
 
 }
