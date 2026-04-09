@@ -113,7 +113,7 @@ const int maxModes = 2;  // 0=cam, 1=menu, 2=webserver
 
 
 // ─── Pin definitions ─────────────────────────────────────────────
-#define SHUTTER_BUTTON 21
+#define SHUTTER_BUTTON 14
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -267,48 +267,113 @@ use_default:
 
 
 // ─── Floyd-Steinberg dithering ───────────────────────────────────
+// void ditherRGB(uint8_t* buf, int w, int h) {
+//   int sz = w * 3;
+//   float* errCur = (float*)calloc(sz, sizeof(float));
+//   float* errNxt = (float*)calloc(sz, sizeof(float));
+//   if (!errCur || !errNxt) {
+//     Serial.println("Dither alloc failed");
+//     free(errCur);
+//     free(errNxt);
+//     return;
+//   }
+//   for (int y = 0; y < h; y++) {
+//     memset(errNxt, 0, sz * sizeof(float));
+//     for (int x = 0; x < w; x++) {
+//       int idx = (y * w + x) * 3;
+//       float r = constrain(buf[idx + 0] + errCur[x * 3 + 0], 0.0f, 255.0f);
+//       float g = constrain(buf[idx + 1] + errCur[x * 3 + 1], 0.0f, 255.0f);
+//       float b = constrain(buf[idx + 2] + errCur[x * 3 + 2], 0.0f, 255.0f);
+//       int ci = nearestColor((int)r, (int)g, (int)b);
+//       Color c = activePalette[ci];
+//       buf[idx + 0] = c.r;
+//       buf[idx + 1] = c.g;
+//       buf[idx + 2] = c.b;
+//       float er = r - c.r, eg = g - c.g, eb = b - c.b;
+//       if (x + 1 < w) {
+//         errCur[(x + 1) * 3 + 0] += er * 7 / 16;
+//         errCur[(x + 1) * 3 + 1] += eg * 7 / 16;
+//         errCur[(x + 1) * 3 + 2] += eb * 7 / 16;
+//       }
+//       if (x - 1 >= 0) {
+//         errNxt[(x - 1) * 3 + 0] += er * 3 / 16;
+//         errNxt[(x - 1) * 3 + 1] += eg * 3 / 16;
+//         errNxt[(x - 1) * 3 + 2] += eb * 3 / 16;
+//       }
+//       errNxt[x * 3 + 0] += er * 5 / 16;
+//       errNxt[x * 3 + 1] += eg * 5 / 16;
+//       errNxt[x * 3 + 2] += eb * 5 / 16;
+//       if (x + 1 < w) {
+//         errNxt[(x + 1) * 3 + 0] += er * 1 / 16;
+//         errNxt[(x + 1) * 3 + 1] += eg * 1 / 16;
+//         errNxt[(x + 1) * 3 + 2] += eb * 1 / 16;
+//       }
+//     }
+//     float* tmp = errCur;
+//     errCur = errNxt;
+//     errNxt = tmp;
+//   }
+//   free(errCur);
+//   free(errNxt);
+// }
 void ditherRGB(uint8_t* buf, int w, int h) {
   int sz = w * 3;
   float* errCur = (float*)calloc(sz, sizeof(float));
   float* errNxt = (float*)calloc(sz, sizeof(float));
+  
   if (!errCur || !errNxt) {
     Serial.println("Dither alloc failed");
     free(errCur);
     free(errNxt);
     return;
   }
+
   for (int y = 0; y < h; y++) {
     memset(errNxt, 0, sz * sizeof(float));
     for (int x = 0; x < w; x++) {
       int idx = (y * w + x) * 3;
-      float r = constrain(buf[idx + 0] + errCur[x * 3 + 0], 0.0f, 255.0f);
-      float g = constrain(buf[idx + 1] + errCur[x * 3 + 1], 0.0f, 255.0f);
-      float b = constrain(buf[idx + 2] + errCur[x * 3 + 2], 0.0f, 255.0f);
-      int ci = nearestColor((int)r, (int)g, (int)b);
+
+      // 1. Read existing buffer values
+      // Note: If buf is naturally BGR, then buf[idx+0] is Blue and buf[idx+2] is Red
+      float b_val = constrain(buf[idx + 0] + errCur[x * 3 + 0], 0.0f, 255.0f);
+      float g_val = constrain(buf[idx + 1] + errCur[x * 3 + 1], 0.0f, 255.0f);
+      float r_val = constrain(buf[idx + 2] + errCur[x * 3 + 2], 0.0f, 255.0f);
+
+      // 2. Find nearest color using the intended order (assuming nearestColor wants R, G, B)
+      int ci = nearestColor((int)r_val, (int)g_val, (int)b_val);
       Color c = activePalette[ci];
-      buf[idx + 0] = c.r;
+
+      // 3. Write back to buffer in the swapped order (Blue, Green, Red)
+      buf[idx + 0] = c.b; 
       buf[idx + 1] = c.g;
-      buf[idx + 2] = c.b;
-      float er = r - c.r, eg = g - c.g, eb = b - c.b;
+      buf[idx + 2] = c.r;
+
+      // 4. Calculate error based on the swap
+      float eb = b_val - c.b;
+      float eg = g_val - c.g;
+      float er = r_val - c.r;
+
+      // 5. Propagate errors (Floyd-Steinberg)
       if (x + 1 < w) {
-        errCur[(x + 1) * 3 + 0] += er * 7 / 16;
-        errCur[(x + 1) * 3 + 1] += eg * 7 / 16;
-        errCur[(x + 1) * 3 + 2] += eb * 7 / 16;
+        errCur[(x + 1) * 3 + 0] += eb * 7 / 16.0f;
+        errCur[(x + 1) * 3 + 1] += eg * 7 / 16.0f;
+        errCur[(x + 1) * 3 + 2] += er * 7 / 16.0f;
       }
       if (x - 1 >= 0) {
-        errNxt[(x - 1) * 3 + 0] += er * 3 / 16;
-        errNxt[(x - 1) * 3 + 1] += eg * 3 / 16;
-        errNxt[(x - 1) * 3 + 2] += eb * 3 / 16;
+        errNxt[(x - 1) * 3 + 0] += eb * 3 / 16.0f;
+        errNxt[(x - 1) * 3 + 1] += eg * 3 / 16.0f;
+        errNxt[(x - 1) * 3 + 2] += er * 3 / 16.0f;
       }
-      errNxt[x * 3 + 0] += er * 5 / 16;
-      errNxt[x * 3 + 1] += eg * 5 / 16;
-      errNxt[x * 3 + 2] += eb * 5 / 16;
+      errNxt[x * 3 + 0] += eb * 5 / 16.0f;
+      errNxt[x * 3 + 1] += eg * 5 / 16.0f;
+      errNxt[x * 3 + 2] += er * 5 / 16.0f;
       if (x + 1 < w) {
-        errNxt[(x + 1) * 3 + 0] += er * 1 / 16;
-        errNxt[(x + 1) * 3 + 1] += eg * 1 / 16;
-        errNxt[(x + 1) * 3 + 2] += eb * 1 / 16;
+        errNxt[(x + 1) * 3 + 0] += eb * 1 / 16.0f;
+        errNxt[(x + 1) * 3 + 1] += eg * 1 / 16.0f;
+        errNxt[(x + 1) * 3 + 2] += er * 1 / 16.0f;
       }
     }
+    // Swap error buffers for the next row
     float* tmp = errCur;
     errCur = errNxt;
     errNxt = tmp;
@@ -316,7 +381,6 @@ void ditherRGB(uint8_t* buf, int w, int h) {
   free(errCur);
   free(errNxt);
 }
-
 
 // ─── SD helpers ──────────────────────────────────────────────────
 void updateUsed() {
@@ -435,7 +499,7 @@ void setup() {
     return;
   }
   sensor_t* s = esp_camera_sensor_get();
-  s->set_vflip(s, 1);
+  s->set_hmirror(s, 1);
 
   loadingScreen(80, "Inicjalizacja EEPROM...");
   EEPROM.begin(1);
@@ -461,6 +525,7 @@ int lastPosition = 0;
 unsigned long sleepTimer = millis();
 int sleepTime = 60000;
 int changedValue = 0;
+int galleryLen = 1;
 void loop() {
   if (digitalRead(SHUTTER_BUTTON) == LOW) {
     if (pressStart == 0) pressStart = millis();
@@ -516,6 +581,8 @@ void loop() {
       if (steps > 0) {
         if (mode == 3) {
           cursorPos++;
+        } else if (mode == 4) {
+          if (cursorPos < galleryLen - 1) cursorPos++;
         } else {
           if (cursorPos < (int)lists[activeList].length - 1) cursorPos++;
         }
@@ -1250,7 +1317,7 @@ void takePicture() {
 
   camera_fb_t* fb = esp_camera_fb_get();
   if (useFlash) {
-    diode.setPixelColor(0, diode.Color(0, 255, 0));
+    diode.setPixelColor(0, diode.Color(0, 0, 0));
     diode.show();
   }
   if (!fb) {
@@ -1675,6 +1742,7 @@ void scanGallery() {
 void drawGalleryList() {
   // Total items = 1 (Back) + galleryCount
   int totalItems = 1 + galleryCount;
+  galleryLen = totalItems;
   cursorPos = constrain(cursorPos, 0, totalItems - 1);
 
   int scrollTop = 0;
