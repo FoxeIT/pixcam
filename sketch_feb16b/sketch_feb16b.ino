@@ -127,7 +127,7 @@ const char* menuItemsMain[7] = {
     "Return to cam", "Gallery", "Web Portal",
     "Change palette", "Games", "Settings", "Sleep mode"
 };
-const char* menuItemsGames[3] = { "Back", "Star Wars", "Tetris" };
+const char* menuItemsGames[2] = { "Back", "Star Wars"}; //READD TETRIS WHEN FIXED
 const char* menuItemsSettings[10] = {
     "Back", "Toggle flash", "Flash brightness", "Flash LED color",
     "Toggle dither", "JPEG quality", "Credits", "Reset",
