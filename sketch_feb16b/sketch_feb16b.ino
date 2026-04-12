@@ -139,7 +139,7 @@ MenuList lists[] = {
     { menuItemsMain,     7  },
     { menuItemsSettings, 10 },
     { paletteListPtrs,   0  },
-    { menuItemsGames,    3  }
+    { menuItemsGames,    2  }
 };
 const uint8_t LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
 
