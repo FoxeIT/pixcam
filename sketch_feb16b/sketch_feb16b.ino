@@ -165,16 +165,37 @@ int  galleryCount = 0;
 int  galleryIndex = 0;
 
 // ─── Encoder ISR ─────────────────────────────────────────────────
+// Full quadrature state machine — both pins sampled together on every edge,
+// so direction is always correct and no artificial debounce window is needed.
+// Each complete A/B cycle (4 transitions) = 1 detent; the quarter-step
+// accumulator filters out contact bounce without discarding real pulses.
 void IRAM_ATTR encoderISR() {
-    static unsigned long lastTime = 0;
-    unsigned long now = micros();
-    // Debounce: ignore edges closer than 2ms apart
-    if (now - lastTime < 2000) return;
-    lastTime = now;
-    // Read DT on CLK falling edge to determine direction
-    if (digitalRead(CLK_PIN) == LOW) {
-        encoderDelta += (digitalRead(DT_PIN) == HIGH) ? 1 : -1;
-    }
+    static uint8_t state = 0;
+    static int8_t  accum = 0;
+
+    // Read both pins at the same instant
+    uint8_t clk = (digitalRead(CLK_PIN) == HIGH) ? 1 : 0;
+    uint8_t dt  = (digitalRead(DT_PIN)  == HIGH) ? 1 : 0;
+    uint8_t cur = (clk << 1) | dt;
+
+    // Grey-code transition table: [old_state][new_state] -> quarter-step direction
+    // Valid CW:  00->01, 01->11, 11->10, 10->00 -> +1
+    // Valid CCW: 00->10, 10->11, 11->01, 01->00 -> -1
+    // No-change or invalid (bounce) -> 0, ignored
+    static const int8_t tbl[4][4] = {
+        { 0, -1, +1,  0 },
+        {+1,  0,  0, -1 },
+        {-1,  0,  0, +1 },
+        { 0, +1, -1,  0 }
+    };
+
+    int8_t dir = tbl[state][cur];
+    state = cur;
+    if (dir == 0) return;
+
+    accum += dir;
+    if      (accum >=  4) { encoderDelta++; accum = 0; }
+    else if (accum <= -4) { encoderDelta--; accum = 0; }
 }
 
 // ─── Forward declarations ─────────────────────────────────────────
@@ -1135,7 +1156,7 @@ void setup() {
     pinMode(CLK_PIN,        INPUT_PULLUP);
     pinMode(DT_PIN,         INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(CLK_PIN), encoderISR, CHANGE);
-    // attachInterrupt(digitalPinToInterrupt(DT_PIN),  encoderISR, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(DT_PIN),  encoderISR, CHANGE);
 
     Wire.begin(I2C_SDA, I2C_SCL);
     if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -1251,10 +1272,12 @@ void loop() {
     }
 
     // Encoder handling (game/devmode/combo modes handle it themselves)
-    // Encoder handling
-    if (encoderDelta != 0) {
-        int delta = encoderDelta;
-        encoderDelta = 0;
+    // Encoder handling — read and clear atomically to avoid racing the ISR
+    noInterrupts();
+    int delta = encoderDelta;
+    encoderDelta = 0;
+    interrupts();
+    if (delta != 0) {
 
         if (mode == 5) {
             // Gallery fullscreen: scroll through images
@@ -1272,16 +1295,12 @@ void loop() {
             // These modes consume encoderDelta themselves — already zeroed above
 
         } else {
-            // Menu / gallery list / value changer
-            if (delta > 0) {
-                int maxPos;
-                if      (mode == 3) maxPos = 255;
-                else if (mode == 4) maxPos = galleryLen - 1;
-                else                maxPos = (int)lists[activeList].length - 1;
-                if (cursorPos < maxPos) cursorPos++;
-            } else {
-                if (cursorPos > 0) cursorPos--;
-            }
+            // Menu / gallery list / value changer — move by full accumulated delta
+            int maxPos;
+            if      (mode == 3) maxPos = 255;
+            else if (mode == 4) maxPos = galleryLen - 1;
+            else                maxPos = (int)lists[activeList].length - 1;
+            cursorPos = constrain(cursorPos + delta, 0, maxPos);
         }
     }
 
