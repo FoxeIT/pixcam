@@ -2123,7 +2123,7 @@ void introScreen() {
         }
     }
     display.display();
-    delay(100);
+    delay(250);
     display.clearDisplay();
 
     display.setTextColor(1);
@@ -2142,7 +2142,7 @@ void introScreen() {
 
     display.drawLine(21, 23, 23, 23, 0);
     display.display();
-    delay(500);
+    delay(1500);
     display.clearDisplay();
 
     display.setTextColor(1);
@@ -2167,7 +2167,7 @@ void introScreen() {
         }
     }
     display.display();
-    delay(100);
+    delay(250);
     display.clearDisplay();
     display.display();
     delay(200);
