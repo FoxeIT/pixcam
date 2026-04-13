@@ -370,7 +370,14 @@ static void handlePaletteUpload() {
   name.replace("/", ""); name.replace("\\", "");
   if (!name.length()) name = "palette.pa";
 
+  // arg("plain") only works for form-encoded bodies; for a raw text/plain POST
+  // we need to read directly from the client stream.
   String body = httpServer.arg("plain");
+  if (!body.length()) {
+    WiFiClient client = httpServer.client();
+    int len = httpServer.header("Content-Length").toInt();
+    if (len > 0) body = client.readString();
+  }
   if (!body.length()) { httpServer.send(400, "text/plain", "Empty"); return; }
 
   if (!SD_MMC.exists("/palettes")) SD_MMC.mkdir("/palettes");
@@ -467,6 +474,10 @@ void startWebServer() {
   httpServer.on("/upload-palette", HTTP_POST, handlePaletteUpload);
   httpServer.on("/reboot",         HTTP_POST, handleReboot);
   httpServer.onNotFound(handleNotFound);
+
+  // Collect Content-Length so handlePaletteUpload can fall back to stream-read
+  const char* hdrs[] = { "Content-Length" };
+  httpServer.collectHeaders(hdrs, 1);
 
   httpServer.begin();
   Serial.println("[web] HTTP on port 80");

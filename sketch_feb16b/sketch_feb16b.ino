@@ -127,7 +127,7 @@ const char* menuItemsMain[7] = {
     "Return to cam", "Gallery", "Web Portal",
     "Change palette", "Games", "Settings", "Sleep mode"
 };
-const char* menuItemsGames[2] = { "Back", "Star Wars"}; //READD TETRIS WHEN FIXED
+const char* menuItemsGames[3] = { "Back", "Star Wars", "Tetris" };
 const char* menuItemsSettings[10] = {
     "Back", "Toggle flash", "Flash brightness", "Flash LED color",
     "Toggle dither", "JPEG quality", "Credits", "Reset",
@@ -139,7 +139,7 @@ MenuList lists[] = {
     { menuItemsMain,     7  },
     { menuItemsSettings, 10 },
     { paletteListPtrs,   0  },
-    { menuItemsGames,    2  }
+    { menuItemsGames,    3  }
 };
 const uint8_t LIST_COUNT = sizeof(lists) / sizeof(lists[0]);
 
@@ -915,10 +915,9 @@ void tetrisLoop() {
     if (tGameOver) { tetrisDraw(); delay(20); return; }
 
     // Encoder → move left/right, one cell per detent
-    // Replace the encoder section in tetrisLoop() with this:
-    if (encoderDelta != 0) {
-        int move = (encoderDelta > 0) ? 1 : -1;
-        encoderDelta = 0;
+    // `delta` was atomically captured (and encoderDelta zeroed) above.
+    if (delta != 0) {
+        int move = (delta > 0) ? 1 : -1;
         if (!tCollides(tPT, tPR, tPX + move, tPY)) {
             tPX += move;
             if (tLockActive) tLockTimer = now;
