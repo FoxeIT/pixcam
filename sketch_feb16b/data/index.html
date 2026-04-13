@@ -434,6 +434,7 @@
                 outline: none;
                 cursor: pointer;
                 border: 1px solid var(--border);
+                margin: 6px 0 0 0;
             }
             input[type="range"]::-webkit-slider-thumb {
                 -webkit-appearance: none;
@@ -503,11 +504,11 @@
             }
             .t-thumb {
                 position: absolute;
-                top: 2px;
-                left: 2px;
+                top: 3px;
+                left: 3px;
                 width: 12px;
                 height: 12px;
-                border-radius: 2px;
+                border-radius: 5px;
                 background: var(--muted);
                 transition:
                     transform 0.2s,
@@ -579,6 +580,34 @@
 
             #gal-main {
                 padding: 20px;
+                position: relative;
+            }
+            #gal-scroll-track {
+                position: fixed;
+                right: 6px;
+                top: 60px;
+                bottom: 6px;
+                width: 5px;
+                background: var(--bg2);
+                border-radius: 3px;
+                display: none;
+                z-index: 100;
+            }
+            #gal-scroll-thumb {
+                position: absolute;
+                left: 0;
+                right: 0;
+                width: 5px;
+                min-height: 30px;
+                background: var(--border);
+                border-radius: 3px;
+                transition: background 0.2s;
+            }
+            #gal-scroll-track.vis {
+                display: block;
+            }
+            #gal-scroll-track:hover #gal-scroll-thumb {
+                background: var(--cyan);
             }
             #gal-toolbar {
                 display: flex;
@@ -1175,6 +1204,84 @@
                 color: var(--warn);
             }
 
+            /* ── Palettes Manager Tab ── */
+            #palettes-main {
+                padding: 20px;
+            }
+            #palettes-toolbar {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+                margin-bottom: 16px;
+                padding-bottom: 14px;
+                border-bottom: 1px solid var(--border);
+            }
+            #palettes-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 10px;
+            }
+            .palette-card {
+                background: var(--bg2);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                overflow: hidden;
+                transition: border-color 0.2s;
+            }
+            .palette-card:hover {
+                border-color: var(--cyan);
+            }
+            .palette-card-strip {
+                height: 20px;
+                display: flex;
+                width: 100%;
+            }
+            .palette-card-body {
+                padding: 10px 12px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .palette-card-name {
+                font-family: var(--fp);
+                font-size: 11px;
+                color: var(--text);
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .palette-card-btn {
+                background: var(--bg3);
+                border: 1px solid var(--border);
+                color: var(--text);
+                font-family: var(--fp);
+                font-size: 10px;
+                padding: 3px 8px;
+                cursor: pointer;
+                border-radius: 2px;
+                transition: border-color 0.15s, color 0.15s;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+            .palette-card-btn:hover {
+                border-color: var(--cyan);
+                color: var(--cyan);
+            }
+            .palette-card-btn.del:hover {
+                border-color: var(--danger);
+                color: var(--danger);
+            }
+            #palettes-empty {
+                grid-column: 1/-1;
+                text-align: center;
+                padding: 60px 20px;
+                font-family: var(--fp);
+                font-size: 13px;
+                color: var(--muted);
+            }
+
             @media (max-width: 680px) {
                 #cam-main {
                     grid-template-columns: 1fr;
@@ -1292,7 +1399,8 @@
                 <div class="tab-bar">
                     <div class="tab active" data-tab="camera">Camera</div>
                     <div class="tab" data-tab="gallery">Gallery</div>
-                    <div class="tab" data-tab="palette">Palettes</div>
+                    <div class="tab" data-tab="palette">Palette Editor</div>
+                    <div class="tab" data-tab="palettes">Palettes</div>
                 </div>
                 <div class="hdr-meta">
                     <div class="cam-status vis" id="cam-status-wrap">
@@ -1338,6 +1446,9 @@
                             style="display: none"
                         />
                     </div>
+                    <div class="hdr-btns" id="hdr-palettes-btns">
+                        <button class="hbtn" id="btn-palettes-refresh">Refresh</button>
+                    </div>
                 </div>
             </div>
 
@@ -1345,7 +1456,8 @@
             <div class="hdr-tabs-row">
                 <div class="tab active" data-tab="camera">Camera</div>
                 <div class="tab" data-tab="gallery">Gallery</div>
-                <div class="tab" data-tab="palette">Palettes</div>
+                <div class="tab" data-tab="palette">Palette Editor</div>
+                <div class="tab" data-tab="palettes">Palettes</div>
             </div>
 
             <!-- Mobile meta row -->
@@ -1414,6 +1526,14 @@
                         onclick="document.getElementById('btn-save').click()"
                     >
                         Save .pa
+                    </button>
+                </div>
+                <div class="hdr-btns" id="hdr-palettes-btns2">
+                    <button
+                        class="hbtn"
+                        onclick="document.getElementById('btn-palettes-refresh').click()"
+                    >
+                        Refresh
                     </button>
                 </div>
             </div>
@@ -1631,14 +1751,6 @@
                                 />
                             </div>
                             <div class="trow">
-                                <span class="trow-label">Horizontal Mirror</span
-                                ><label class="toggle"
-                                    ><input type="checkbox" id="tog-hmirror" />
-                                    <div class="t-track"></div>
-                                    <div class="t-thumb"></div
-                                ></label>
-                            </div>
-                            <div class="trow">
                                 <span class="trow-label">Vertical Flip</span
                                 ><label class="toggle"
                                     ><input type="checkbox" id="tog-vflip" />
@@ -1743,6 +1855,7 @@
                     </div>
                 </div>
             </div>
+            <div id="gal-scroll-track"><div id="gal-scroll-thumb"></div></div>
         </div>
 
         <!-- Lightbox -->
@@ -1764,15 +1877,17 @@
             <div id="pal-main">
                 <div id="preview-strip"></div>
                 <div id="palette-grid"></div>
-
+				<div id="add-bar">
+                    <button id="btn-add-color">+ Add color</button>
+                </div>
                 <div id="pal-upload-panel">
                     <div class="panel-title">
                         Send Palette to Camera (SD Card)
                     </div>
                     <div id="pal-upload-body">
                         <p>
-                            Upload the current palette as a .pa file to the
-                            ESP32's SD card over WiFi.
+                            Upload the current palette to the
+                            PixCam's storage over WiFi.
                         </p>
                         <div
                             style="
@@ -1878,9 +1993,17 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div id="add-bar">
-                    <button id="btn-add-color">+ Add color</button>
+        <!-- PALETTES MANAGER TAB -->
+        <div class="tab-panel" id="tab-palettes">
+            <div id="palettes-main">
+                <div id="palettes-toolbar">
+                    <span style="font-family:var(--fp);font-size:11px;color:var(--muted)">Installed palettes on SD card</span>
+                </div>
+                <div id="palettes-grid">
+                    <div id="palettes-empty">No palettes found on SD card</div>
                 </div>
             </div>
         </div>
@@ -1944,6 +2067,7 @@
                 show("hdr-cam-btns", t === "camera");
                 show("hdr-gal-btns", t === "gallery");
                 show("hdr-pal-btns", t === "palette");
+                show("hdr-palettes-btns", t === "palettes");
 
                 show("cam-status-wrap2", t === "camera");
                 show("gal-count-label2", t === "gallery");
@@ -1951,8 +2075,10 @@
                 show("hdr-cam-btns2", t === "camera");
                 show("hdr-gal-btns2", t === "gallery");
                 show("hdr-pal-btns2", t === "palette");
+                show("hdr-palettes-btns2", t === "palettes");
 
                 if (t === "gallery" && galleryFiles.length === 0) loadGallery();
+                if (t === "palettes") loadPalettesList();
             }
             document.querySelectorAll(".tab").forEach((tab) => {
                 tab.addEventListener("click", () => switchTab(tab.dataset.tab));
@@ -2332,9 +2458,13 @@
             function renderGallery() {
                 galGrid.innerHTML = "";
                 updateGalCount(galleryFiles.length);
+                const scrollTrack = document.getElementById("gal-scroll-track");
+                const scrollThumb = document.getElementById("gal-scroll-thumb");
+
                 if (galleryFiles.length === 0) {
                     galEmptyMsg.textContent = "No photos on SD card yet";
                     galGrid.appendChild(galEmptyEl);
+                    scrollTrack.classList.remove("vis");
                     return;
                 }
                 galleryFiles.forEach((f, i) => {
@@ -2397,22 +2527,62 @@
                     galGrid.appendChild(thumb);
                 });
                 galSelInfo.textContent = selectedFiles.size + " selected";
+
+                // Set up scroll indicator
+                scrollTrack.classList.add("vis");
+                function updateGalScrollThumb() {
+                    const scrollEl = document.documentElement;
+                    const scrollTop = scrollEl.scrollTop || document.body.scrollTop;
+                    const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+                    const trackH = scrollTrack.offsetHeight;
+                    const thumbH = Math.max(30, trackH * (scrollEl.clientHeight / scrollEl.scrollHeight));
+                    const thumbTop = maxScroll > 0 ? (trackH - thumbH) * (scrollTop / maxScroll) : 0;
+                    scrollThumb.style.height = thumbH + "px";
+                    scrollThumb.style.top = thumbTop + "px";
+                }
+                updateGalScrollThumb();
+                // Remove old listener to avoid duplicates
+                if (window._galScrollHandler) {
+                    window.removeEventListener("scroll", window._galScrollHandler);
+                }
+                window._galScrollHandler = updateGalScrollThumb;
+                window.addEventListener("scroll", updateGalScrollThumb, { passive: true });
             }
 
             async function downloadFile(f) {
                 try {
+                    toast("Fetching " + f.name + "…", "info");
                     const r = await fetch(f.url);
-                    if (!r.ok) throw 0;
-                    const blob = await r.blob(),
-                        url = URL.createObjectURL(blob),
-                        a = document.createElement("a");
-                    a.href = url;
-                    a.download = f.name;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    toast("Downloaded: " + f.name, "ok");
-                } catch {
-                    toast("Download failed", "err");
+                    if (!r.ok) throw new Error("HTTP " + r.status);
+                    const blob = await r.blob();
+
+                    // 8x nearest-neighbour upscale via Canvas
+                    // Each original pixel becomes an 8×8 block in the output
+                    const bmp = await createImageBitmap(blob);
+                    const srcW = bmp.width, srcH = bmp.height;
+                    const dstW = srcW * 8,  dstH = srcH * 8;
+
+                    const canvas = document.createElement("canvas");
+                    canvas.width  = dstW;
+                    canvas.height = dstH;
+                    const ctx = canvas.getContext("2d");
+                    // Disable any browser smoothing so we get sharp pixel blocks
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(bmp, 0, 0, dstW, dstH);
+                    bmp.close();
+
+                    canvas.toBlob((outBlob) => {
+                        const url = URL.createObjectURL(outBlob);
+                        const a = document.createElement("a");
+                        // Rename: replace .jpg extension with _8x.png
+                        a.download = f.name.replace(/\.[^.]+$/, "") + "_8x.png";
+                        a.href = url;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast("Downloaded (8x): " + a.download, "ok");
+                    }, "image/png");
+                } catch(e) {
+                    toast("Download failed: " + e.message, "err");
                 }
             }
             async function deleteFile(name) {
@@ -2771,6 +2941,139 @@
             ];
             renderPalette();
             updateFilename(currentFilename);
+
+            // ═══════════════════════════════════
+            //  PALETTES MANAGER
+            // ═══════════════════════════════════
+            let palettesList = [];
+
+            async function loadPalettesList() {
+                const grid = document.getElementById("palettes-grid");
+                const empty = document.getElementById("palettes-empty");
+                grid.innerHTML = '<div id="palettes-empty" style="grid-column:1/-1;text-align:center;padding:60px 20px;font-family:var(--fp);font-size:13px;color:var(--muted)"><div class="spinner" style="margin:0 auto"></div></div>';
+                try {
+                    const r = await fetch(BASE + "/palettes");
+                    if (!r.ok) throw new Error("HTTP " + r.status);
+                    palettesList = await r.json();
+                } catch(e) {
+                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;font-family:var(--fp);font-size:13px;color:var(--muted)">Could not load palettes (' + e.message + ')</div>';
+                    return;
+                }
+                renderPalettesList();
+            }
+
+            async function loadPalettePreview(name) {
+                try {
+                    const r = await fetch(BASE + "/palettes/" + encodeURIComponent(name));
+                    if (!r.ok) return [];
+                    const text = await r.text();
+                    return text.trim().split("\n").map(line => {
+                        const p = line.trim().split(/\s+/);
+                        if (p.length === 3) {
+                            const [rv, gv, bv] = p.map(Number);
+                            if ([rv,gv,bv].every(v => !isNaN(v) && v >= 0 && v <= 255))
+                                return { r: rv, g: gv, b: bv };
+                        }
+                        return null;
+                    }).filter(Boolean);
+                } catch { return []; }
+            }
+
+            async function renderPalettesList() {
+                const grid = document.getElementById("palettes-grid");
+                grid.innerHTML = "";
+                if (palettesList.length === 0) {
+                    grid.innerHTML = '<div id="palettes-empty" style="grid-column:1/-1;text-align:center;padding:60px 20px;font-family:var(--fp);font-size:13px;color:var(--muted)">No palettes found on SD card</div>';
+                    return;
+                }
+                for (const name of palettesList) {
+                    const card = document.createElement("div");
+                    card.className = "palette-card";
+
+                    // Strip bar (will fill once we load the palette)
+                    const strip = document.createElement("div");
+                    strip.className = "palette-card-strip";
+                    card.appendChild(strip);
+
+                    const body = document.createElement("div");
+                    body.className = "palette-card-body";
+
+                    const nameEl = document.createElement("div");
+                    nameEl.className = "palette-card-name";
+                    nameEl.textContent = name;
+                    body.appendChild(nameEl);
+
+                    const dlBtn = document.createElement("button");
+                    dlBtn.className = "palette-card-btn";
+                    dlBtn.textContent = "DL";
+                    dlBtn.title = "Download";
+                    dlBtn.addEventListener("click", async () => {
+                        try {
+                            const r = await fetch(BASE + "/palettes/" + encodeURIComponent(name));
+                            if (!r.ok) throw 0;
+                            const blob = await r.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url; a.download = name; a.click();
+                            URL.revokeObjectURL(url);
+                            toast("Downloaded: " + name, "ok");
+                        } catch { toast("Download failed", "err"); }
+                    });
+                    body.appendChild(dlBtn);
+
+                    const delBtn = document.createElement("button");
+                    delBtn.className = "palette-card-btn del";
+                    delBtn.textContent = "DEL";
+                    delBtn.title = "Delete";
+                    delBtn.addEventListener("click", async () => {
+                        if (!confirm("Delete palette " + name + " from SD card?")) return;
+                        try {
+                            const r = await fetch(BASE + "/palettes/" + encodeURIComponent(name), { method: "DELETE" });
+                            if (!r.ok) throw 0;
+                            palettesList = palettesList.filter(n => n !== name);
+                            renderPalettesList();
+                            toast("Deleted: " + name, "ok");
+                        } catch { toast("Delete failed", "err"); }
+                    });
+                    body.appendChild(delBtn);
+                    card.appendChild(body);
+                    grid.appendChild(card);
+
+                    // Async load preview colors
+                    loadPalettePreview(name).then(colors => {
+                        strip.innerHTML = "";
+                        if (colors.length === 0) {
+                            strip.style.background = "var(--bg3)";
+                            return;
+                        }
+                        colors.forEach(c => {
+                            const blk = document.createElement("div");
+                            blk.style.flex = "1";
+                            blk.style.background = rgbToHex(c.r, c.g, c.b);
+                            strip.appendChild(blk);
+                        });
+                    });
+                }
+            }
+
+            document.getElementById("btn-palettes-refresh").addEventListener("click", loadPalettesList);
+
+            // ═══════════════════════════════════
+            //  GLOBAL SCROLL WHEEL
+            //  Works in gallery (scrolls page) and lightbox (prev/next)
+            // ═══════════════════════════════════
+            document.addEventListener("wheel", (e) => {
+                // If lightbox is open, wheel navigates images
+                if (!lightbox.classList.contains("hidden")) {
+                    e.preventDefault();
+                    if (e.deltaY > 0) document.getElementById("lb-nav-next").click();
+                    else              document.getElementById("lb-nav-prev").click();
+                    return;
+                }
+                // Otherwise normal page scroll happens naturally — no interception needed.
+                // But palette editor and camera tabs don't need anything special.
+            }, { passive: false });
+
         </script>
     </body>
 </html>

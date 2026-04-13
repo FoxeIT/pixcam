@@ -61,6 +61,8 @@ static void handleStatus();
 static void handleGalleryList();
 static void handleGalleryFile();
 static void handlePaletteUpload();
+static void handlePaletteList();
+static void handlePaletteFile();
 static void handleReboot();
 static void handleStream();
 static void handleNotFound();
@@ -82,9 +84,8 @@ static bool fb_to_jpg(camera_fb_t* fb,
     *outLen = fb->len;
     return (*outLen > 0);
   }
-  int W       = fb->width;
-  int totalPx = fb->len / 2;
-  int H       = (W > 0) ? (totalPx / W) : 0;
+  int W = fb->width;
+  int H = fb->height;   // ← use the actual field, don't recompute
   if (H <= 0) return false;
 
   uint8_t* rgb = (uint8_t*)ps_malloc(W * H * 3);
@@ -301,7 +302,62 @@ static void handleGalleryFile() {
   File f = SD_MMC.open(path, FILE_READ);
   if (!f) { httpServer.send(404, "text/plain", "Not found"); return; }
   httpServer.sendHeader("Cache-Control", "no-cache");
+  httpServer.sendHeader("Content-Disposition", "attachment; filename=\"" + name + "\"");
+  httpServer.sendHeader("Content-Length", String(f.size()));  // ← ADD THIS
   httpServer.streamFile(f, "image/jpeg");
+  f.close();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET /palettes  →  JSON array of palette filenames
+// ─────────────────────────────────────────────────────────────────────────────
+static void handlePaletteList() {
+  httpServer.sendHeader("Access-Control-Allow-Origin", "*");
+  File dir = SD_MMC.open("/palettes");
+  if (!dir || !dir.isDirectory()) {
+    httpServer.send(200, "application/json", "[]"); return;
+  }
+  String json = "[";
+  bool first = true;
+  File entry;
+  while ((entry = dir.openNextFile())) {
+    String name = entry.name();
+    int slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.substring(slash + 1);
+    if (name.endsWith(".pa")) {
+      if (!first) json += ",";
+      json += "\"" + name + "\"";
+      first = false;
+    }
+    entry.close();
+  }
+  dir.close();
+  json += "]";
+  httpServer.send(200, "application/json", json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET/DELETE /palettes/<n>
+// ─────────────────────────────────────────────────────────────────────────────
+static void handlePaletteFile() {
+  httpServer.sendHeader("Access-Control-Allow-Origin", "*");
+  String name = httpServer.uri().substring(10);   // strip "/palettes/"
+  if (name.length() == 0 || name.indexOf('/') >= 0) {
+    httpServer.send(400, "text/plain", "Bad filename"); return;
+  }
+  String path = "/palettes/" + name;
+
+  if (httpServer.method() == HTTP_DELETE) {
+    bool removed = SD_MMC.remove(path);
+    httpServer.send(removed ? 200 : 404, "text/plain", removed ? "Deleted" : "Not found");
+    return;
+  }
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f) { httpServer.send(404, "text/plain", "Not found"); return; }
+  httpServer.sendHeader("Cache-Control", "no-cache");
+  httpServer.sendHeader("Content-Disposition", "attachment; filename=\"" + name + "\"");
+  httpServer.sendHeader("Content-Length", String(f.size()));
+  httpServer.streamFile(f, "text/plain");
   f.close();
 }
 
@@ -314,7 +370,14 @@ static void handlePaletteUpload() {
   name.replace("/", ""); name.replace("\\", "");
   if (!name.length()) name = "palette.pa";
 
+  // arg("plain") only works for form-encoded bodies; for a raw text/plain POST
+  // we need to read directly from the client stream.
   String body = httpServer.arg("plain");
+  if (!body.length()) {
+    WiFiClient client = httpServer.client();
+    int len = httpServer.header("Content-Length").toInt();
+    if (len > 0) body = client.readString();
+  }
   if (!body.length()) { httpServer.send(400, "text/plain", "Empty"); return; }
 
   if (!SD_MMC.exists("/palettes")) SD_MMC.mkdir("/palettes");
@@ -369,7 +432,8 @@ static void handleStream() {
 // ─────────────────────────────────────────────────────────────────────────────
 static void handleNotFound() {
   httpServer.sendHeader("Access-Control-Allow-Origin", "*");
-  if (httpServer.uri().startsWith("/gallery/")) { handleGalleryFile(); return; }
+  if (httpServer.uri().startsWith("/gallery/"))  { handleGalleryFile();  return; }
+  if (httpServer.uri().startsWith("/palettes/")) { handlePaletteFile();  return; }
   httpServer.send(404, "text/plain", "Not found: " + httpServer.uri());
 }
 
@@ -405,9 +469,15 @@ void startWebServer() {
   httpServer.on("/status",         HTTP_GET,  handleStatus);
   httpServer.on("/gallery",        HTTP_GET,  handleGalleryList);
   httpServer.on("/gallery/",       HTTP_GET,  handleGalleryFile);
+  httpServer.on("/palettes",       HTTP_GET,  handlePaletteList);
+  httpServer.on("/palettes/",      HTTP_GET,  handlePaletteFile);
   httpServer.on("/upload-palette", HTTP_POST, handlePaletteUpload);
   httpServer.on("/reboot",         HTTP_POST, handleReboot);
   httpServer.onNotFound(handleNotFound);
+
+  // Collect Content-Length so handlePaletteUpload can fall back to stream-read
+  const char* hdrs[] = { "Content-Length" };
+  httpServer.collectHeaders(hdrs, 1);
 
   httpServer.begin();
   Serial.println("[web] HTTP on port 80");
