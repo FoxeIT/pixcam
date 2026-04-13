@@ -165,37 +165,17 @@ int  galleryCount = 0;
 int  galleryIndex = 0;
 
 // ─── Encoder ISR ─────────────────────────────────────────────────
-// Full quadrature state machine — both pins sampled together on every edge,
-// so direction is always correct and no artificial debounce window is needed.
-// Each complete A/B cycle (4 transitions) = 1 detent; the quarter-step
-// accumulator filters out contact bounce without discarding real pulses.
+// Simple lookup-table ISR (same approach as first firmware).
+// Fires on every edge of CLK or DT; one full detent = 4 quarter-steps.
+// The /2 divider in the menu handler converts 2 quarter-steps -> 1 cursor move.
 void IRAM_ATTR encoderISR() {
-    static uint8_t state = 0;
-    static int8_t  accum = 0;
-
-    // Read both pins at the same instant
-    uint8_t clk = (digitalRead(CLK_PIN) == HIGH) ? 1 : 0;
-    uint8_t dt  = (digitalRead(DT_PIN)  == HIGH) ? 1 : 0;
-    uint8_t cur = (clk << 1) | dt;
-
-    // Grey-code transition table: [old_state][new_state] -> quarter-step direction
-    // Valid CW:  00->01, 01->11, 11->10, 10->00 -> +1
-    // Valid CCW: 00->10, 10->11, 11->01, 01->00 -> -1
-    // No-change or invalid (bounce) -> 0, ignored
-    static const int8_t tbl[4][4] = {
-        { 0, -1, +1,  0 },
-        {+1,  0,  0, -1 },
-        {-1,  0,  0, +1 },
-        { 0, +1, -1,  0 }
-    };
-
-    int8_t dir = tbl[state][cur];
-    state = cur;
-    if (dir == 0) return;
-
-    accum += dir;
-    if      (accum >=  4) { encoderDelta++; accum = 0; }
-    else if (accum <= -4) { encoderDelta--; accum = 0; }
+    static uint8_t lastState = 0;
+    uint8_t clk = digitalRead(CLK_PIN);
+    uint8_t dt  = digitalRead(DT_PIN);
+    uint8_t state = (clk << 1) | dt;
+    static const int8_t table[16] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
+    encoderDelta += table[(lastState << 2) | state];
+    lastState = state;
 }
 
 // ─── Forward declarations ─────────────────────────────────────────
@@ -289,8 +269,9 @@ void enterDevMode() {
     diode.setPixelColor(0, 0, 0, 0);
     diode.show();
     progModeHoldStart = 0;
-    devTab = 0;
+    devTab    = 0;
     devScroll = 0;
+    encoderDelta = 0;
     mode = 10;
 }
 
@@ -332,10 +313,10 @@ void devModeDraw() {
         case 0: { // SYS
             esp_chip_info_t ci; esp_chip_info(&ci);
             LI("Cores:",    ci.cores);
-            snprintf(tmp, sizeof(tmp), "%d MHz", getCpuFrequencyMhz());  L("CPU:", tmp);
-            snprintf(tmp, sizeof(tmp), "%d MHz", getXtalFrequencyMhz()); L("XTAL:", tmp);
-            snprintf(tmp, sizeof(tmp), "%d MHz", getApbFrequency()/1000000); L("APB:", tmp);
-            snprintf(tmp, sizeof(tmp), "rev%d", ci.revision); L("Chip rev:", tmp);
+            snprintf(tmp, sizeof(tmp), "%d MHz", getCpuFrequencyMhz());      L("CPU:",     tmp);
+            snprintf(tmp, sizeof(tmp), "%d MHz", getXtalFrequencyMhz());     L("XTAL:",    tmp);
+            snprintf(tmp, sizeof(tmp), "%d MHz", getApbFrequency()/1000000); L("APB:",     tmp);
+            snprintf(tmp, sizeof(tmp), "rev%d",  ci.revision);               L("Chip rev:",tmp);
             LI("FreeHeap:", ESP.getFreeHeap());
             LI("HeapSize:", ESP.getHeapSize());
             LI("MinHeap:",  ESP.getMinFreeHeap());
@@ -352,8 +333,8 @@ void devModeDraw() {
             esp_reset_reason_t rr = esp_reset_reason();
             const char* rn[] = {"UNK","PWR","EXT","SW","PANIC","INT_WDT","TSK_WDT","WDT","DEEP_SLP","BROWNOUT","SDIO"};
             L("Rst rsn:", (rr < 11) ? rn[rr] : "?");
-            snprintf(tmp, sizeof(tmp), "%lu KB",  ESP.getFlashChipSize()/1024);        L("Flash:",   tmp);
-            snprintf(tmp, sizeof(tmp), "%lu MHz", ESP.getFlashChipSpeed()/1000000);    L("FlshSpd:", tmp);
+            snprintf(tmp, sizeof(tmp), "%lu KB",  ESP.getFlashChipSize()/1024);     L("Flash:",   tmp);
+            snprintf(tmp, sizeof(tmp), "%lu MHz", ESP.getFlashChipSpeed()/1000000); L("FlshSpd:", tmp);
             L("IDF ver:", esp_get_idf_version());
             break;
         }
@@ -432,7 +413,7 @@ void devModeDraw() {
             L("Compiled:", __DATE__);
             L("Time:",     __TIME__);
             L("IDF:",      esp_get_idf_version());
-            L("DevMode:",  "L3R3+hold :)");
+            L("DevMode:",  "hold 10s :)");
             break;
         }
     }
@@ -493,11 +474,21 @@ void devModeLoop() {
         }
     }
 
-    if (encoderDelta != 0) {
-        DBGF("ENCODER MOVE: %d\n", encoderDelta);
-        devScroll += (encoderDelta > 0) ? 1 : -1;
-        if (devScroll < 0) devScroll = 0;
-        encoderDelta = 0;
+    // Encoder scroll — read raw quarter-steps, divide by 2 for sensitivity
+    noInterrupts();
+    int delta = encoderDelta;
+    encoderDelta = 0;
+    interrupts();
+
+    if (delta != 0) {
+        static int devRemainder = 0;
+        devRemainder += delta;
+        int steps = devRemainder / 2;
+        devRemainder %= 2;
+        if (steps != 0) {
+            devScroll += steps;
+            if (devScroll < 0) devScroll = 0;
+        }
     }
 
     devModeDraw();
@@ -891,7 +882,7 @@ void tetrisLoop() {
 
     if (btnDown && !btnWas) { btnWas = true; btnAt = now; softDropActive = false; }
 
-    // Snapshot and clear encoder atomically
+    // Consume encoder HERE for left/right movement
     noInterrupts();
     int delta    = encoderDelta;
     encoderDelta = 0;
@@ -935,16 +926,25 @@ void tetrisLoop() {
 
     if (tGameOver) { tetrisDraw(); delay(20); return; }
 
-    // Encoder → move left/right, one cell per detent
-    // `delta` was atomically captured (and encoderDelta zeroed) above.
+    // Encoder → move left/right
+    // ISR fires on every quarter-step; /2 gives one cell per half-detent which
+    // feels responsive without being jittery.
     if (delta != 0) {
-        int move = (delta > 0) ? 1 : -1;
-        if (!tCollides(tPT, tPR, tPX + move, tPY)) {
-            tPX += move;
-            if (tLockActive) tLockTimer = now;
+        static int tetRemainder = 0;
+        tetRemainder += delta;
+        int steps = tetRemainder / 2;
+        tetRemainder %= 2;
+        while (steps > 0) {
+            if (!tCollides(tPT, tPR, tPX + 1, tPY)) { tPX++; if (tLockActive) tLockTimer = now; }
+            steps--;
+        }
+        while (steps < 0) {
+            if (!tCollides(tPT, tPR, tPX - 1, tPY)) { tPX--; if (tLockActive) tLockTimer = now; }
+            steps++;
         }
         tetrisDraw();
     }
+
     // Gravity
     unsigned long dropInterval = softDropActive ? 40 : (unsigned long)tDropMs();
     if (now - tLastFall > dropInterval) {
@@ -1012,7 +1012,8 @@ int kula1X=95, kula1Y=0, kula2X=95, kula2Y=0, kula3X=95, kula3Y=0, kula4X=95, ku
 int punkty=0, predkosc=3, predkoscWroga=1, minCzas=600, maxCzas=1200, promien=10;
 int zycia=5, startLicznika=0, liczbaKul=0, poziom=1, srodek=95;
 unsigned long czasStart=0, czasLosowy=0, czasAktualny=0, czasPoziomu=0;
-int pozycjaGracza=30, encoderGamePos=0; unsigned long referencja=0;
+int pozycjaGracza=30, encoderGamePos=0;
+unsigned long referencja=0;
 
 void gameInit() {
     display.clearDisplay();
@@ -1040,7 +1041,7 @@ void gameInit() {
 void rozgrywka() {
     display.clearDisplay();
     if (startLicznika == 0) { czasStart = millis(); czasLosowy = random(400, 1200); startLicznika = 1; }
-    czasAktualny = millis()-referencja;
+    czasAktualny = millis() - referencja;
 
     if ((czasAktualny - czasPoziomu) > 50000) {
         czasPoziomu = czasAktualny; poziom++; predkosc++;
@@ -1063,8 +1064,13 @@ void rozgrywka() {
     if (liczbaKul > 2) { display.drawCircle(kula3X, kula3Y, 4, 1); kula3X -= predkosc; }
     if (liczbaKul > 3) { display.drawCircle(kula4X, kula4Y, 2, 1); kula4X -= predkosc; }
 
-    if (encoderDelta != 0) {
-        encoderGamePos -= encoderDelta; encoderDelta = 0;
+    noInterrupts();
+    int gDelta = encoderDelta;
+    encoderDelta = 0;
+    interrupts();
+
+    if (gDelta != 0) {
+        encoderGamePos -= gDelta;
         encoderGamePos = constrain(encoderGamePos, 2, 46);
         pozycjaGracza  = encoderGamePos;
     }
@@ -1224,7 +1230,6 @@ void setup() {
     isPsram = psramFound();
     loadingScreen(100, "Gotowe!");
     introScreen();
-    if (mode == 2) { startWebServer(); }
 }
 
 
@@ -1236,15 +1241,16 @@ uint8_t activeList = 0;
 int cursorPos=0, lastmode=67, lastButState=0, lastPosition=0;
 unsigned long sleepTimer = 0;
 int sleepTime=60000, changedValue=0, galleryLen=1;
-long delta;
 
 void loop() {
+    // ── Programmer mode detection ─────────────────────────────────
     if (mode == 0) {
         checkProgrammerMode();
     } else {
         progModeHoldStart = 0;
     }
 
+    // ── Button press/release ──────────────────────────────────────
     if (digitalRead(SHUTTER_BUTTON) == LOW) {
         if (pressStart == 0) pressStart = millis();
     } else {
@@ -1253,6 +1259,7 @@ void loop() {
 
     bool buttonState = digitalRead(SHUTTER_BUTTON);
 
+    // ── Mode dispatch ─────────────────────────────────────────────
     switch (mode) {
         case 0:  viewFinder(); break;
         case 1:  if (lastmode != mode) switchList(0); drawMenu(); break;
@@ -1271,40 +1278,60 @@ void loop() {
         default: mode = 0; break;
     }
 
-    // Encoder handling (game/devmode/combo modes handle it themselves)
-    // Encoder handling — read and clear atomically to avoid racing the ISR
-    noInterrupts();
-    int delta = encoderDelta;
-    encoderDelta = 0;
-    interrupts();
-    if (delta != 0) {
+    // ── Encoder handling ─────────────────────────────────────────
+    // Games (6,7) and devmode (10) consume encoderDelta inside their own loops.
+    // Everything else is handled here with a /2 remainder accumulator so that
+    // one full detent (= 2 quarter-steps from the ISR) moves the cursor by 1.
+    if (mode != 6 && mode != 7 && mode != 10) {
+        noInterrupts();
+        int delta = encoderDelta;
+        encoderDelta = 0;
+        interrupts();
 
-        if (mode == 5) {
-            // Gallery fullscreen: scroll through images
-            galleryIndex -= delta;
-            if (galleryIndex < 0)            galleryIndex = galleryCount - 1;
-            if (galleryIndex >= galleryCount) galleryIndex = 0;
+        if (delta != 0) {
+            if (mode == 5) {
+                // Gallery fullscreen: one detent = one image
+                static int galRemainder = 0;
+                galRemainder += delta;
+                int steps = galRemainder / 2;
+                galRemainder %= 2;
+                if (steps != 0) {
+                    galleryIndex = (galleryIndex - steps + galleryCount) % galleryCount;
+                    if (galleryIndex < 0) galleryIndex = galleryCount - 1;
+                }
 
-        } else if (mode == 9) {
-            // RGB picker: adjust selected channel
-            uint8_t* vals[3] = {&flashR, &flashG, &flashB};
-            int nv = (int)(*vals[rgbChannel]) + delta;
-            *vals[rgbChannel] = (uint8_t)constrain(nv, 0, 255);
+            } else if (mode == 9) {
+                // RGB picker: adjust selected channel directly (fine control)
+                static int rgbRemainder = 0;
+                rgbRemainder += delta;
+                int steps = rgbRemainder / 2;
+                rgbRemainder %= 2;
+                if (steps != 0) {
+                    uint8_t* vals[3] = {&flashR, &flashG, &flashB};
+                    int nv = (int)(*vals[rgbChannel]) + steps;
+                    *vals[rgbChannel] = (uint8_t)constrain(nv, 0, 255);
+                }
 
-        } else if (mode == 6 || mode == 7 || mode == 10) {
-            // These modes consume encoderDelta themselves — already zeroed above
+            } else {
+                // Menu / gallery list / value changer
+                // /2 so one full detent = 1 cursor step
+                static int menuRemainder = 0;
+                menuRemainder += delta;
+                int steps = menuRemainder / 2;
+                menuRemainder %= 2;
 
-        } else {
-            // Menu / gallery list / value changer — move by full accumulated delta
-            int maxPos;
-            if      (mode == 3) maxPos = 255;
-            else if (mode == 4) maxPos = galleryLen - 1;
-            else                maxPos = (int)lists[activeList].length - 1;
-            cursorPos = constrain(cursorPos + delta, 0, maxPos);
+                if (steps != 0) {
+                    int maxPos;
+                    if      (mode == 3) maxPos = 255;
+                    else if (mode == 4) maxPos = galleryLen - 1;
+                    else                maxPos = (int)lists[activeList].length - 1;
+                    cursorPos = constrain(cursorPos + steps, 0, maxPos);
+                }
+            }
         }
     }
 
-    // Auto-sleep
+    // ── Auto-sleep ────────────────────────────────────────────────
     if ((lastButState == buttonState) && (cursorPos == lastPosition) &&
         (mode == lastmode) && (mode != 2)) {
         if (millis() - sleepTimer > (unsigned long)sleepTime) {
@@ -1574,9 +1601,6 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
                     break;
                 case 5: changedValue = 1; startChangingValue(changedValue); break;
                 case 6:
-                    // Draw credits immediately; they disappear when the button is released.
-                    // menuAction is called from buttonActionHandler on release, so we draw
-                    // and immediately return — the display will clear naturally on next redraw.
                     display.clearDisplay(); display.setTextColor(1); display.setTextWrap(false);
                     display.setFont(&FreeSerifBold12pt7b); display.setCursor(33,19); display.print("PixCam");
                     display.drawBitmap(12, 2, image_paint_17_bits, 21, 21, 1);
@@ -1591,9 +1615,8 @@ void menuAction(uint8_t listIndex, uint8_t itemIndex) {
                     display.setCursor(43,50); display.print("- UI, firmware, case");
                     display.setCursor(43,58); display.print("- Website, firmware");
                     display.display();
-                    // Wait for next press, then dismiss only when button is RELEASED
-                    while (digitalRead(SHUTTER_BUTTON) == HIGH) { delay(10); } // wait for press
-                    while (digitalRead(SHUTTER_BUTTON) == LOW)  { delay(10); } // wait for release
+                    while (digitalRead(SHUTTER_BUTTON) == HIGH) { delay(10); }
+                    while (digitalRead(SHUTTER_BUTTON) == LOW)  { delay(10); }
                     break;
                 case 7: {
                     display.clearDisplay(); display.setTextColor(1); display.setTextWrap(false);
@@ -1795,18 +1818,14 @@ void takePicture() {
     camera_config_t config;
     config.ledc_channel   = LEDC_CHANNEL_0;
     config.ledc_timer     = LEDC_TIMER_0;
-    config.pin_d0         = Y2_GPIO_NUM;  config.pin_d1   = Y3_GPIO_NUM;
-    config.pin_d2         = Y4_GPIO_NUM;  config.pin_d3   = Y5_GPIO_NUM;
-    config.pin_d4         = Y6_GPIO_NUM;  config.pin_d5   = Y7_GPIO_NUM;
-    config.pin_d6         = Y8_GPIO_NUM;  config.pin_d7   = Y9_GPIO_NUM;
-    config.pin_xclk       = XCLK_GPIO_NUM;
-    config.pin_pclk       = PCLK_GPIO_NUM;
-    config.pin_vsync      = VSYNC_GPIO_NUM;
-    config.pin_href       = HREF_GPIO_NUM;
-    config.pin_sscb_sda   = SIOD_GPIO_NUM;
-    config.pin_sscb_scl   = SIOC_GPIO_NUM;
-    config.pin_pwdn       = PWDN_GPIO_NUM;
-    config.pin_reset      = RESET_GPIO_NUM;
+    config.pin_d0=Y2_GPIO_NUM; config.pin_d1=Y3_GPIO_NUM;
+    config.pin_d2=Y4_GPIO_NUM; config.pin_d3=Y5_GPIO_NUM;
+    config.pin_d4=Y6_GPIO_NUM; config.pin_d5=Y7_GPIO_NUM;
+    config.pin_d6=Y8_GPIO_NUM; config.pin_d7=Y9_GPIO_NUM;
+    config.pin_xclk=XCLK_GPIO_NUM; config.pin_pclk=PCLK_GPIO_NUM;
+    config.pin_vsync=VSYNC_GPIO_NUM; config.pin_href=HREF_GPIO_NUM;
+    config.pin_sscb_sda=SIOD_GPIO_NUM; config.pin_sscb_scl=SIOC_GPIO_NUM;
+    config.pin_pwdn=PWDN_GPIO_NUM; config.pin_reset=RESET_GPIO_NUM;
     config.xclk_freq_hz   = 20000000;
     config.pixel_format   = PIXFORMAT_RGB565;
     config.frame_size     = FRAMESIZE_QVGA;
@@ -1823,6 +1842,7 @@ void takePicture() {
     sensor_t* s = esp_camera_sensor_get();
     s->set_hmirror(s, 1);
     delay(100);
+
     camera_fb_t* dummy = esp_camera_fb_get();
     if (dummy) esp_camera_fb_return(dummy);
     delay(50);
@@ -1890,7 +1910,7 @@ void takePicture() {
         while (rem > 0) {
             size_t chunk = min(rem, (size_t)4096);
             size_t w = f.write(ptr, chunk);
-            if (w == 0) { Serial.println("[SD] write error - aborting"); break; }
+            if (w == 0) { Serial.println("[SD] write error"); break; }
             ptr += w; rem -= w;
         }
         f.close();
@@ -1907,27 +1927,22 @@ void takePicture() {
     delay(100);
 
     camera_config_t cfgView;
-    cfgView.ledc_channel   = LEDC_CHANNEL_0;
-    cfgView.ledc_timer     = LEDC_TIMER_0;
-    cfgView.pin_d0         = Y2_GPIO_NUM;  cfgView.pin_d1  = Y3_GPIO_NUM;
-    cfgView.pin_d2         = Y4_GPIO_NUM;  cfgView.pin_d3  = Y5_GPIO_NUM;
-    cfgView.pin_d4         = Y6_GPIO_NUM;  cfgView.pin_d5  = Y7_GPIO_NUM;
-    cfgView.pin_d6         = Y8_GPIO_NUM;  cfgView.pin_d7  = Y9_GPIO_NUM;
-    cfgView.pin_xclk       = XCLK_GPIO_NUM;
-    cfgView.pin_pclk       = PCLK_GPIO_NUM;
-    cfgView.pin_vsync      = VSYNC_GPIO_NUM;
-    cfgView.pin_href       = HREF_GPIO_NUM;
-    cfgView.pin_sscb_sda   = SIOD_GPIO_NUM;
-    cfgView.pin_sscb_scl   = SIOC_GPIO_NUM;
-    cfgView.pin_pwdn       = PWDN_GPIO_NUM;
-    cfgView.pin_reset      = RESET_GPIO_NUM;
-    cfgView.xclk_freq_hz   = 20000000;
-    cfgView.pixel_format   = PIXFORMAT_RGB565;
-    cfgView.frame_size     = FRAMESIZE_QQVGA;
-    cfgView.jpeg_quality   = 10;
-    cfgView.fb_location    = CAMERA_FB_IN_PSRAM;
-    cfgView.fb_count       = 1;
-    cfgView.grab_mode      = CAMERA_GRAB_WHEN_EMPTY;
+    cfgView.ledc_channel=LEDC_CHANNEL_0; cfgView.ledc_timer=LEDC_TIMER_0;
+    cfgView.pin_d0=Y2_GPIO_NUM; cfgView.pin_d1=Y3_GPIO_NUM;
+    cfgView.pin_d2=Y4_GPIO_NUM; cfgView.pin_d3=Y5_GPIO_NUM;
+    cfgView.pin_d4=Y6_GPIO_NUM; cfgView.pin_d5=Y7_GPIO_NUM;
+    cfgView.pin_d6=Y8_GPIO_NUM; cfgView.pin_d7=Y9_GPIO_NUM;
+    cfgView.pin_xclk=XCLK_GPIO_NUM; cfgView.pin_pclk=PCLK_GPIO_NUM;
+    cfgView.pin_vsync=VSYNC_GPIO_NUM; cfgView.pin_href=HREF_GPIO_NUM;
+    cfgView.pin_sscb_sda=SIOD_GPIO_NUM; cfgView.pin_sscb_scl=SIOC_GPIO_NUM;
+    cfgView.pin_pwdn=PWDN_GPIO_NUM; cfgView.pin_reset=RESET_GPIO_NUM;
+    cfgView.xclk_freq_hz=20000000;
+    cfgView.pixel_format=PIXFORMAT_RGB565;
+    cfgView.frame_size=FRAMESIZE_QQVGA;
+    cfgView.jpeg_quality=10;
+    cfgView.fb_location=CAMERA_FB_IN_PSRAM;
+    cfgView.fb_count=1;
+    cfgView.grab_mode=CAMERA_GRAB_WHEN_EMPTY;
 
     esp_camera_init(&cfgView);
     sensor_t* ss = esp_camera_sensor_get();
@@ -2004,7 +2019,6 @@ void scanGallery() {
         entry.close();
     }
     dir.close();
-    // Sort descending
     for (int i = 0; i < galleryCount - 1; i++) {
         for (int j = 0; j < galleryCount - i - 1; j++) {
             if (strcmp(galleryList[j], galleryList[j+1]) < 0) {
@@ -2118,74 +2132,49 @@ void drawGalleryFullscreen() {
 
 void introScreen() {
     display.clearDisplay();
-
-    display.setTextColor(1);
-    display.setTextWrap(false);
+    display.setTextColor(1); display.setTextWrap(false);
     display.setFont(&FreeSerifBold12pt7b);
-    display.setCursor(33, 38);
-    display.print("PixCam");
-
+    display.setCursor(33, 38); display.print("PixCam");
     display.drawBitmap(12, 21, image_paint_17_bits, 21, 21, 1);
-
+    // erase a few pixels that bleed outside the icon bounds
     display.drawLine(14, 30, 14, 32, 0);
-
     display.drawLine(30, 30, 30, 32, 0);
-
     display.drawLine(21, 39, 23, 39, 0);
-
     display.drawLine(21, 23, 23, 23, 0);
-
-    for (int y = 0; y < 64; y++) {
-        for (int x = 0; x < 128; x++) {
+    // odd-column dither wipe
+    for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 128; x++)
             display.drawPixel(x + (y%2), y, 0);
-        }
-    }
     display.display();
     delay(250);
+
     display.clearDisplay();
-
-    display.setTextColor(1);
-    display.setTextWrap(false);
+    display.setTextColor(1); display.setTextWrap(false);
     display.setFont(&FreeSerifBold12pt7b);
-    display.setCursor(33, 38);
-    display.print("PixCam");
-
+    display.setCursor(33, 38); display.print("PixCam");
     display.drawBitmap(12, 21, image_paint_17_bits, 21, 21, 1);
-
     display.drawLine(14, 30, 14, 32, 0);
-
     display.drawLine(30, 30, 30, 32, 0);
-
     display.drawLine(21, 39, 23, 39, 0);
-
     display.drawLine(21, 23, 23, 23, 0);
     display.display();
     delay(1500);
+
     display.clearDisplay();
-
-    display.setTextColor(1);
-    display.setTextWrap(false);
+    display.setTextColor(1); display.setTextWrap(false);
     display.setFont(&FreeSerifBold12pt7b);
-    display.setCursor(33, 38);
-    display.print("PixCam");
-
+    display.setCursor(33, 38); display.print("PixCam");
     display.drawBitmap(12, 21, image_paint_17_bits, 21, 21, 1);
-
     display.drawLine(14, 30, 14, 32, 0);
-
     display.drawLine(30, 30, 30, 32, 0);
-
     display.drawLine(21, 39, 23, 39, 0);
-
     display.drawLine(21, 23, 23, 23, 0);
-
-    for (int y = 0; y < 64; y++) {
-        for (int x = 0; x < 128; x++) {
+    for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 128; x++)
             display.drawPixel(x + (y%2), y, 0);
-        }
-    }
     display.display();
     delay(250);
+
     display.clearDisplay();
     display.display();
     delay(200);
