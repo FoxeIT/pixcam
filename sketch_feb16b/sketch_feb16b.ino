@@ -992,7 +992,7 @@ int kula1X=95, kula1Y=0, kula2X=95, kula2Y=0, kula3X=95, kula3Y=0, kula4X=95, ku
 int punkty=0, predkosc=3, predkoscWroga=1, minCzas=600, maxCzas=1200, promien=10;
 int zycia=5, startLicznika=0, liczbaKul=0, poziom=1, srodek=95;
 unsigned long czasStart=0, czasLosowy=0, czasAktualny=0, czasPoziomu=0;
-int pozycjaGracza=30, encoderGamePos=0;
+int pozycjaGracza=30, encoderGamePos=0; unsigned long referencja=0;
 
 void gameInit() {
     display.clearDisplay();
@@ -1020,7 +1020,7 @@ void gameInit() {
 void rozgrywka() {
     display.clearDisplay();
     if (startLicznika == 0) { czasStart = millis(); czasLosowy = random(400, 1200); startLicznika = 1; }
-    czasAktualny = millis();
+    czasAktualny = millis()-referencja;
 
     if ((czasAktualny - czasPoziomu) > 50000) {
         czasPoziomu = czasAktualny; poziom++; predkosc++;
@@ -1109,7 +1109,7 @@ void resetGry() {
     punkty=0; predkosc=3; predkoscWroga=1; minCzas=600; maxCzas=1200; promien=12;
     zycia=5; startLicznika=0; liczbaKul=0; poziom=1;
     czasStart=0; czasLosowy=0; czasAktualny=0; czasPoziomu=millis();
-    encoderDelta=0; encoderGamePos=30; pozycjaGracza=30;
+    encoderDelta=0; encoderGamePos=30; pozycjaGracza=30; referencja=millis();
 }
 
 
